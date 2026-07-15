@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.streamlit/secrets.toml
+data/local/
+approved_expert_decisions.json
+approved_plans.json
