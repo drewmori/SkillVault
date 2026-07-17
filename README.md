@@ -1,6 +1,6 @@
 # SkillVault
 
-SkillVault preserves the practical judgment of senior technical-support employees so new support engineers can solve customer problems faster, with traceable evidence and safe general suggestions when the company's documentation is incomplete.
+SkillVault saves the decision making of senior employees so new engineers and workers can solve customer problems faster, with traceable evidence and safe general suggestions when the company's documentation is incomplete or the employee doesn't know what to do next.
 
 The competition demo uses a fictional SaaS company called **Northstar Cloud**. Its former expert knowledge covers client troubleshooting, engineering handoffs, code help, escalation decisions, client outreach, reporting, presentations, security, billing, onboarding, and company procedures.
 
