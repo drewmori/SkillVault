@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 
 import pandas as pd
+
+
+LIFECYCLE_STATUSES = ("Current", "Outdated", "Replaced")
+DEMO_APPROVAL_DATE = "2026-07-13"
+DEMO_EXPIRATION_DATE = "2027-07-13"
 
 
 @dataclass
@@ -17,6 +23,20 @@ class ExpertCase:
     methods: str = ""
     outcome: str = ""
     media: list[dict[str, object]] = field(default_factory=list)
+    expert_owner: str = "Northstar Cloud Knowledge Council"
+    department: str = "Cross-functional"
+    approval_date: str = DEMO_APPROVAL_DATE
+    last_reviewed_date: str = DEMO_APPROVAL_DATE
+    expiration_date: str = DEMO_EXPIRATION_DATE
+    lifecycle_status: str = "Current"
+    replaces_source: str = ""
+    goal: str = ""
+    chosen_approach: str = ""
+    alternatives_considered: str = ""
+    constraints: str = ""
+    reusable_rule: str = ""
+    exceptions: str = ""
+    capture_evidence: dict[str, object] = field(default_factory=dict)
 
 
 REQUIRED_COLUMNS = {"case", "decision", "reasoning"}
@@ -29,6 +49,44 @@ VALID_DECISIONS = {
 }
 
 
+def _clean_optional(value: object, default: str = "") -> str:
+    if value is None or pd.isna(value):
+        return default
+    cleaned = str(value).strip()
+    return default if not cleaned or cleaned.lower() == "nan" else cleaned
+
+
+def _iso_date(value: object, default: date) -> str:
+    cleaned = _clean_optional(value)
+    if not cleaned:
+        return default.isoformat()
+    try:
+        return date.fromisoformat(cleaned[:10]).isoformat()
+    except ValueError:
+        return default.isoformat()
+
+
+def normalize_lifecycle_status(value: object) -> str:
+    cleaned = _clean_optional(value, "Current").lower()
+    return next((status for status in LIFECYCLE_STATUSES if status.lower() == cleaned), "Current")
+
+
+def effective_lifecycle_status(case: ExpertCase, today: date | None = None) -> str:
+    """Return the stored status, automatically treating expired knowledge as outdated."""
+    status = normalize_lifecycle_status(case.lifecycle_status)
+    if status in {"Outdated", "Replaced"}:
+        return status
+    try:
+        expires = date.fromisoformat(case.expiration_date[:10])
+    except (TypeError, ValueError):
+        return "Outdated"
+    return "Outdated" if expires < (today or date.today()) else "Current"
+
+
+def decision_is_retrievable(case: ExpertCase, today: date | None = None) -> bool:
+    return effective_lifecycle_status(case, today) == "Current"
+
+
 def cases_from_dataframe(frame: pd.DataFrame) -> tuple[list[ExpertCase], list[str]]:
     """Convert an approved upload into model-ready cases."""
     missing = sorted(REQUIRED_COLUMNS - set(frame.columns))
@@ -37,6 +95,7 @@ def cases_from_dataframe(frame: pd.DataFrame) -> tuple[list[ExpertCase], list[st
 
     cases: list[ExpertCase] = []
     errors: list[str] = []
+    today = date.today()
     for row_number, row in frame.iterrows():
         summary = str(row["case"]).strip()
         label = str(row["decision"]).strip()
@@ -47,12 +106,54 @@ def cases_from_dataframe(frame: pd.DataFrame) -> tuple[list[ExpertCase], list[st
             errors.append(f"Row {row_number + 2}: decision must be one of {sorted(VALID_DECISIONS)}")
         if not reasoning or reasoning.lower() == "nan":
             errors.append(f"Row {row_number + 2}: reasoning is empty")
-        source_file = str(row.get("source_file", "uploaded_expert_cases.csv")).strip()
-        instructions = str(row.get("instructions", reasoning)).strip()
-        software = str(row.get("software", "")).strip()
-        methods = str(row.get("methods", "")).strip()
-        outcome = str(row.get("outcome", "")).strip()
-        cases.append(ExpertCase(summary, label, reasoning, infer_features(summary), source_file, instructions, software, methods, outcome))
+        source_file = _clean_optional(row.get("source_file"), "uploaded_expert_cases.csv")
+        instructions = _clean_optional(row.get("instructions"), reasoning)
+        software = _clean_optional(row.get("software"))
+        methods = _clean_optional(row.get("methods"))
+        outcome = _clean_optional(row.get("outcome"))
+        expert_owner = _clean_optional(row.get("expert_owner"), "Imported knowledge owner")
+        department = _clean_optional(row.get("department"), "Unassigned")
+        approval_date = _iso_date(row.get("approval_date"), today)
+        try:
+            approved_on = date.fromisoformat(approval_date)
+        except ValueError:
+            approved_on = today
+        last_reviewed_date = _iso_date(row.get("last_reviewed_date"), approved_on)
+        expiration_date = _iso_date(row.get("expiration_date"), approved_on + timedelta(days=365))
+        lifecycle_status = normalize_lifecycle_status(row.get("lifecycle_status"))
+        replaces_source = _clean_optional(row.get("replaces_source"))
+        goal = _clean_optional(row.get("goal"))
+        chosen_approach = _clean_optional(row.get("chosen_approach"))
+        alternatives_considered = _clean_optional(row.get("alternatives_considered"))
+        constraints = _clean_optional(row.get("constraints"))
+        reusable_rule = _clean_optional(row.get("reusable_rule"))
+        exceptions = _clean_optional(row.get("exceptions"))
+        cases.append(
+            ExpertCase(
+                summary,
+                label,
+                reasoning,
+                infer_features(summary),
+                source_file,
+                instructions,
+                software,
+                methods,
+                outcome,
+                expert_owner=expert_owner,
+                department=department,
+                approval_date=approval_date,
+                last_reviewed_date=last_reviewed_date,
+                expiration_date=expiration_date,
+                lifecycle_status=lifecycle_status,
+                replaces_source=replaces_source,
+                goal=goal,
+                chosen_approach=chosen_approach,
+                alternatives_considered=alternatives_considered,
+                constraints=constraints,
+                reusable_rule=reusable_rule,
+                exceptions=exceptions,
+            )
+        )
     return cases, errors
 
 
@@ -1045,7 +1146,226 @@ def build_demo_cases() -> list[ExpertCase]:
         inferred_software, inferred_methods = infer_company_metadata(case.summary)
         case.software = case.software or inferred_software
         case.methods = case.methods or inferred_methods
-    return cases
+    # Add a broad, deterministic synthetic knowledge pack for the demo. These
+    # cases are intentionally generated from realistic Northstar Cloud task
+    # variations so the prototype has enough coverage for many different ways
+    # a new employee might describe the same kind of problem.
+    return cases + build_generated_cases()
+
+
+def build_generated_cases() -> list[ExpertCase]:
+    """Create 540 varied expert decisions for the fictional demo company.
+
+    The generator keeps the data reproducible while varying the wording,
+    affected scope, trigger, and verification detail. This gives the local
+    retrieval model more examples without requiring a large checked-in file.
+    """
+    variants = [
+        ("single workspace", "one Northstar Cloud workspace", "the workspace owner"),
+        ("one customer", "one customer tenant", "the account owner"),
+        ("a pilot group", "a pilot group of users", "the pilot lead"),
+        ("a regional rollout", "customers in one region", "the regional owner"),
+        ("a new release", "the newest production release", "the release owner"),
+        ("a legacy workflow", "an older supported workflow", "the support lead"),
+        ("a high-value account", "a strategic customer account", "the account team"),
+        ("an internal team", "an internal Northstar Cloud team", "the team manager"),
+        ("a scheduled job", "one scheduled automation", "the data owner"),
+        ("a customer-facing report", "one customer-facing report", "the reporting owner"),
+        ("an API integration", "one external API integration", "the integration owner"),
+        ("a security-sensitive tenant", "one security-sensitive tenant", "the security owner"),
+        ("a renewal cycle", "one customer renewal cycle", "the customer success lead"),
+        ("a new hire", "one new employee workflow", "the onboarding owner"),
+        ("a time-sensitive request", "a request due today", "the incident lead"),
+        ("a weekend change window", "a weekend maintenance window", "the on-call engineer"),
+        ("a regulated customer", "a regulated customer tenant", "the compliance owner"),
+        ("a small business account", "a small business tenant", "the support lead"),
+        ("an enterprise account", "an enterprise tenant with custom controls", "the enterprise lead"),
+        ("a mobile user", "a mobile client workflow", "the client platform owner"),
+        ("a browser workflow", "a browser-based user workflow", "the frontend owner"),
+        ("a webhook consumer", "one webhook consumer", "the integration owner"),
+        ("a batch export", "one scheduled export", "the analytics owner"),
+        ("a quarterly review", "a quarterly customer review", "the customer success lead"),
+        ("a renewal presentation", "a renewal presentation for one account", "the account executive"),
+        ("a board update", "an internal board update", "the executive sponsor"),
+        ("a launch checklist", "one product launch checklist", "the launch manager"),
+        ("a rollback decision", "one possible production rollback", "the incident commander"),
+        ("a certificate rotation", "one certificate rotation", "the platform owner"),
+        ("a permission change", "one requested permission change", "the security approver"),
+        ("a data correction", "one requested data correction", "the data steward"),
+        ("a duplicate event", "one duplicated billing or webhook event", "the systems owner"),
+        ("a delayed notification", "one delayed customer notification", "the messaging owner"),
+        ("a failed backup", "one failed backup job", "the reliability owner"),
+        ("a restore test", "one scheduled restore test", "the infrastructure owner"),
+        ("an accessibility review", "one accessibility review", "the design-system owner"),
+        ("a localization update", "one localized customer workflow", "the content owner"),
+        ("a documentation migration", "one documentation migration", "the documentation owner"),
+        ("a training session", "one employee training session", "the enablement lead"),
+        ("a support queue spike", "a sudden support queue spike", "the support manager"),
+        ("a recurring incident", "a recurring production incident", "the reliability lead"),
+        ("a new vendor", "one new third-party vendor integration", "the procurement owner"),
+        ("a dependency update", "one dependency upgrade", "the engineering owner"),
+        ("a schema change", "one planned data schema change", "the data platform owner"),
+        ("an audit request", "one audit evidence request", "the compliance lead"),
+        ("a privacy request", "one customer privacy request", "the privacy owner"),
+        ("a contract exception", "one requested contract exception", "the legal owner"),
+        ("a high-severity ticket", "a high-severity customer ticket", "the escalation manager"),
+        ("a post-incident review", "one post-incident review", "the incident commander"),
+        ("a forecast update", "one customer or revenue forecast", "the finance owner"),
+    ]
+    domains = [
+        {
+            "topic": "API request failures",
+            "keywords": "API endpoint request timeout 429 response payload",
+            "label": "Diagnose and verify",
+            "reason": "The former expert reproduced the request, separated client, gateway, and service behavior, and used the exact response and timestamp before changing anything.",
+            "steps": "1. Capture endpoint, method, tenant, request ID, timestamp, and sanitized payload.\n2. Reproduce with the smallest request that still fails.\n3. Compare client, gateway, and service logs.\n4. Check rate limits, timeout settings, and the last known-good release.\n5. Document the confirmed cause before proposing a narrow fix.",
+            "software": "Northstar Cloud API Gateway; Postman; Datadog",
+            "methods": "Reproduction-first debugging; request tracing; boundary testing",
+            "source": "api_troubleshooting_playbook.md",
+            "outcome": "The team isolated the failing layer and avoided changing unrelated services.",
+        },
+        {
+            "topic": "Python and service code changes",
+            "keywords": "Python function code exception unit test regression",
+            "label": "Write and test",
+            "reason": "The former expert defined expected behavior, made the smallest code change, and protected it with a focused test before expanding the change.",
+            "steps": "1. Write the expected input, output, and edge cases.\n2. Reproduce the current behavior with a small test.\n3. Make the smallest readable change.\n4. Run unit, error-path, and regression tests.\n5. Record the changed files and remaining risks in the handoff.",
+            "software": "Python; pytest; GitHub Actions",
+            "methods": "Test-driven change; small diffs; regression testing",
+            "source": "engineering_code_standards.md",
+            "outcome": "The change passed focused tests and was easier for another engineer to review.",
+        },
+        {
+            "topic": "Client support and communication",
+            "keywords": "client customer user tenant support impact update response",
+            "label": "Follow standard process",
+            "reason": "The former expert confirmed impact and ownership first, then gave the customer a specific update time instead of promising an unverified fix.",
+            "steps": "1. Confirm tenant, affected users, impact, timeline, and attempted steps.\n2. Reproduce or verify the issue with a low-risk check.\n3. Separate confirmed facts from hypotheses.\n4. Send the client the next action, owner, and update time.\n5. Escalate if the issue repeats or affects multiple customers.",
+            "software": "Northstar Cloud Support Console; Jira; customer timeline",
+            "methods": "Impact assessment; structured client update; evidence-based handoff",
+            "source": "support_triage_playbook.md",
+            "outcome": "The client received a clear update while the internal team continued investigation.",
+        },
+        {
+            "topic": "Reporting and analytics",
+            "keywords": "report dashboard metric KPI CSV retention data discrepancy",
+            "label": "Diagnose and verify",
+            "reason": "The former expert reconciled definitions, filters, timezones, and one sample before publishing a conclusion about the metric.",
+            "steps": "1. Record metric definition, date range, timezone, filters, and scope.\n2. Compare the dashboard with the source export on one small sample.\n3. Check joins, duplicate rows, late-arriving data, and refresh time.\n4. Label confirmed numbers separately from hypotheses.\n5. Ask the data owner to review unexplained discrepancies.",
+            "software": "Northstar Cloud Analytics; Snowflake; Looker",
+            "methods": "Metric reconciliation; timezone checks; sample validation",
+            "source": "reporting_standards.md",
+            "outcome": "The team corrected the interpretation or documented the data limitation before sharing the report.",
+        },
+        {
+            "topic": "Investor and customer presentations",
+            "keywords": "presentation slide deck investor pitch PowerPoint story metrics",
+            "label": "Follow standard process",
+            "reason": "The former expert built the story around the audience's decision, used verified evidence, and removed detail that did not support the main message.",
+            "steps": "1. Define the audience, decision, and one message.\n2. Organize the story around the audience's problem and the product outcome.\n3. Give every slide one conclusion and one supporting visual.\n4. Verify metrics, dates, and assumptions with the source owner.\n5. End with the exact ask, owner, milestone, and next date.",
+            "software": "PowerPoint; Northstar Cloud demo environment; Looker",
+            "methods": "Audience-first storytelling; one-message-per-slide; evidence review",
+            "source": "presentation_standards.md",
+            "outcome": "The presentation was easier to follow and the audience understood the requested decision.",
+        },
+        {
+            "topic": "Security and access requests",
+            "keywords": "security access permission SSO SAML secret production privacy",
+            "label": "Escalate for review",
+            "reason": "The former expert paused irreversible or privilege-expanding actions and routed the request to the designated security or data owner.",
+            "steps": "1. Identify tenant, system, scope, requester, and business need.\n2. Do not copy secrets or sensitive records into a broad ticket.\n3. Check least-privilege, approval, retention, and audit requirements.\n4. Preserve only the evidence the responsible owner needs.\n5. Obtain security or privacy approval before making the final change.",
+            "software": "Northstar Cloud Admin; Okta; Jira; audit log",
+            "methods": "Least-privilege review; scope minimization; approval workflow",
+            "source": "security_access_runbook.md",
+            "outcome": "The request was resolved with the right approval trail and without exposing unnecessary data.",
+        },
+        {
+            "topic": "Deployment and reliability",
+            "keywords": "deployment release latency outage rollback monitoring production",
+            "label": "Diagnose and verify",
+            "reason": "The former expert compared the new release with the last known-good version, measured customer impact, and kept rollback reversible.",
+            "steps": "1. Record release version, start time, affected region, and customer impact.\n2. Compare error rate, latency, and saturation with the last known-good window.\n3. Check logs, dependency health, feature flags, and recent configuration changes.\n4. Use a canary or rollback only with an owner and success condition.\n5. Write the incident timeline and follow-up action.",
+            "software": "GitHub Actions; Datadog; PagerDuty; Northstar Cloud API",
+            "methods": "Canary comparison; error-budget review; reversible rollback",
+            "source": "incident_response_runbook.md",
+            "outcome": "The team reduced customer impact while preserving evidence for the root-cause review.",
+        },
+        {
+            "topic": "Billing and operations",
+            "keywords": "billing invoice payment subscription renewal revenue operations",
+            "label": "Follow standard process",
+            "reason": "The former expert reconciled the invoice, subscription state, payment event, and account owner before changing a billing record.",
+            "steps": "1. Capture tenant, invoice, subscription, payment event, and requested correction.\n2. Compare the billing ledger with the product entitlement state.\n3. Check refunds, credits, renewal dates, and duplicate events.\n4. Do not edit the ledger without the billing owner's approval.\n5. Communicate the confirmed status and next update time.",
+            "software": "Northstar Cloud Billing; Stripe test console; Snowflake; Jira",
+            "methods": "Ledger reconciliation; event timeline review; approval control",
+            "source": "billing_operations_playbook.md",
+            "outcome": "The billing status was corrected or explained without creating a second accounting discrepancy.",
+        },
+        {
+            "topic": "Onboarding and documentation",
+            "keywords": "onboarding documentation runbook new hire workflow training checklist",
+            "label": "Build in small steps",
+            "reason": "The former expert started with the smallest complete workflow, tested it with a new hire, and improved the documentation from observed confusion.",
+            "steps": "1. Define the new employee's first successful outcome.\n2. List prerequisites, access, examples, and the owner for each step.\n3. Build a short path that works end to end.\n4. Ask a new person to follow it without coaching and record blockers.\n5. Update the runbook and add a dated owner for future review.",
+            "software": "Notion; Northstar Cloud Admin; GitHub; Loom",
+            "methods": "Smallest useful workflow; newcomer test; documentation review",
+            "source": "onboarding_documentation_guide.md",
+            "outcome": "A new employee completed the workflow with fewer live interruptions and clearer escalation points.",
+        },
+        {
+            "topic": "Data pipeline and scheduled jobs",
+            "keywords": "data pipeline ETL scheduled job warehouse refresh missing rows",
+            "label": "Diagnose and verify",
+            "reason": "The former expert traced the job from input to warehouse, compared row counts and timestamps, and identified whether the issue was late data or a failed transformation.",
+            "steps": "1. Capture job run ID, source window, expected rows, and actual rows.\n2. Check scheduler, source freshness, transformation logs, and warehouse load status.\n3. Compare one affected partition with the prior successful run.\n4. Re-run only the safe, idempotent step if approved.\n5. Document data impact and notify report owners before refresh.",
+            "software": "Snowflake; dbt; GitHub Actions; Datadog",
+            "methods": "Lineage tracing; row-count reconciliation; idempotent rerun",
+            "source": "data_pipeline_runbook.md",
+            "outcome": "The missing data source was identified and the report owner received an accurate refresh estimate.",
+        },
+        {
+            "topic": "Product and process improvement",
+            "keywords": "product request workflow process improvement feature prioritization feedback",
+            "label": "Build in small steps",
+            "reason": "The former expert converted the request into a measurable small experiment before committing to a broad product change.",
+            "steps": "1. Define the user problem and measurable success condition.\n2. Separate the desired outcome from the requested feature.\n3. Test the smallest reversible workflow with a representative user.\n4. Measure adoption, failure points, and support cost.\n5. Decide whether evidence supports a larger build or a different solution.",
+            "software": "Jira; Northstar Cloud product analytics; Figma",
+            "methods": "Problem framing; smallest experiment; outcome measurement",
+            "source": "product_discovery_playbook.md",
+            "outcome": "The team learned whether the underlying problem was real before spending effort on a large feature.",
+        },
+        {
+            "topic": "Client response and handoff",
+            "keywords": "client email response escalation handoff customer communication next update",
+            "label": "Follow standard process",
+            "reason": "The former expert wrote a response that distinguished confirmed facts, unknowns, next action, owner, and update time.",
+            "steps": "1. Summarize the customer's request and business impact in one sentence.\n2. State what has been verified and what is still unknown.\n3. Give one safe next action and the responsible owner.\n4. Set the next update time without promising an unverified fix.\n5. Attach a concise handoff with logs, timestamps, scope, and reproduction.",
+            "software": "Northstar Cloud Support Console; Jira; approved response templates",
+            "methods": "Fact-versus-hypothesis separation; concise handoff; expectation setting",
+            "source": "customer_response_templates.md",
+            "outcome": "The customer received a useful update and engineering could start without repeating discovery work.",
+        },
+    ]
+
+    generated: list[ExpertCase] = []
+    for domain_index, domain in enumerate(domains):
+        for variant_index, (variant_name, scope, owner) in enumerate(variants):
+            summary = f"Northstar Cloud {domain['topic']} task for {scope}: the team needs help with {domain['keywords']}."
+            reasoning = f"{domain['reason']} The current variation affects {scope}, and {owner} needs a clear, traceable decision."
+            features = infer_features(f"{summary} {domain['keywords']}")
+            features.update({"age_days": 0, "defect": float("bug" in domain["keywords"] or "failure" in domain["keywords"]), "evidence": 1.0, "repeat_customer": float("customer" in scope), "late_request": float("today" in scope), "high_value": float("high-value" in scope)})
+            generated.append(ExpertCase(
+                summary,
+                domain["label"],
+                reasoning,
+                features,
+                f"generated_{domain_index + 1:02d}_{variant_index + 1:02d}_{domain['source']}",
+                domain["steps"],
+                domain["software"],
+                f"{domain['methods']}; variation: {variant_name}",
+                domain["outcome"],
+            ))
+    return generated
 
 
 def infer_company_metadata(text: str) -> tuple[str, str]:

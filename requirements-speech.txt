@@ -1,0 +1,2 @@
+# Optional local recording transcription; core SkillVault does not require it.
+faster-whisper>=1.1,<2

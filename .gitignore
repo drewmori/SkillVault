@@ -6,3 +6,6 @@ __pycache__/
 data/local/
 approved_expert_decisions.json
 approved_plans.json
+recommendation_feedback.json
+/output/*
+!/output/pdf/

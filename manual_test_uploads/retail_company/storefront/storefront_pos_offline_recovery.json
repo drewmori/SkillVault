@@ -1,0 +1,43 @@
+{
+  "record_type": "completed_storefront_decision",
+  "company": "Cedar & Finch Retail",
+  "store": "Store 034",
+  "incident_id": "POS-034-2026-072",
+  "opened_at": "2026-08-14T17:21:00-05:00",
+  "closed_at": "2026-08-14T18:07:00-05:00",
+  "situation": "All four registers showed payment gateway unavailable during the Friday evening rush. Barcode scanning and cash drawer functions still worked, but card authorizations timed out. The handheld inventory devices remained online.",
+  "decision": "Diagnose and verify",
+  "reasoning": "The manager chose the approved offline-sales procedure only after confirming that the outage affected every register, the store network was otherwise reachable, and the payment-status page showed a regional gateway incident. Employees were not allowed to repeatedly charge cards or use personal hotspots because duplicate transactions and card-data exposure were possible.",
+  "software_and_tools": [
+    "CedarPOS register diagnostics",
+    "payment provider status page",
+    "StoreConnect network dashboard",
+    "incident hotline",
+    "paper transaction queue log"
+  ],
+  "methods": [
+    "scope comparison across registers",
+    "network and device isolation",
+    "duplicate-authorization prevention",
+    "approved offline-mode checklist",
+    "post-recovery transaction reconciliation"
+  ],
+  "completed_steps": [
+    "Recorded the first failure time and exact register error before rebooting or retrying.",
+    "Tested one low-value transaction on Register 1 and stopped after the timeout; did not repeat the same card authorization.",
+    "Compared all four registers, the handheld devices, and the StoreConnect dashboard to separate a payment-gateway outage from a full store-network outage.",
+    "Checked the payment provider status page and called the incident hotline with store number, error text, first failure time, and affected registers.",
+    "Enabled approved offline mode only after the incident owner confirmed it was permitted. Limited transactions to the documented offline amount and excluded gift cards, returns, split tender, manual card entry, and high-risk merchandise.",
+    "Assigned one employee to explain the delay and direct customers to cash or approved offline lanes. Employees did not photograph cards, write card numbers, or use personal devices.",
+    "After recovery, processed the queued authorizations once, compared approved and declined results against receipts, and flagged possible duplicates before closing drawers.",
+    "Attached the reconciliation report and incident-owner closure confirmation to POS-034-2026-072."
+  ],
+  "escalation_rules": [
+    "Do not enable offline mode unless the incident owner approves it for the active outage.",
+    "Stop offline selling if queue capacity is reached, the register loses local encryption status, duplicate authorizations appear, or the store cannot securely retain the queue.",
+    "Escalate immediately for suspected card-data exposure, a customer reporting duplicate charges, or any request to bypass transaction limits."
+  ],
+  "outcome": "The gateway recovered after 46 minutes. The store completed 38 approved offline transactions, declined two queued transactions before merchandise left the store, found zero duplicate charges, and reconciled all receipts to the closing report. Incident Operations confirmed normal processing before offline mode was disabled.",
+  "source_file": "Store_034_POS_incident_closeout.json",
+  "fictional_training_notice": "All details are fictional and created only for SkillVault upload and retrieval testing."
+}
