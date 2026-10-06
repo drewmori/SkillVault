@@ -1,49 +1,6 @@
 # SkillVault
 
-SkillVault saves the decision making of senior employees so new engineers and workers can solve customer problems faster, with traceable evidence and safe general suggestions when the company's documentation is incomplete or the employee doesn't know what to do next.
 
-The competition demo uses a fictional SaaS company called **Northstar Cloud**. Its former expert knowledge covers client troubleshooting, engineering handoffs, code help, escalation decisions, client outreach, reporting, presentations, security, billing, onboarding, and company procedures.
-
-## Competition documentation
-
-### How Codex and GPT-5.6 were used
-
-Codex was used as the primary development environment and coding collaborator. It helped build the Streamlit interface, organize the data model, implement the TF-IDF retrieval and scikit-learn classification pipeline, debug the small-dataset training issue, add expert-decision ingestion, expand the fictional knowledge pack, add media support, improve the tailoring logic, and refine the user experience.
-
-GPT-5.6 was used during development to plan the product concept, compare competition categories, design the expert-knowledge workflow, generate and review realistic Northstar Cloud scenarios, identify missing edge cases, debug implementation decisions, and improve the product language and visual flow. GPT-5.6 is not part of the finished app's runtime. SkillVault now uses a locally hosted open-weight Qwen model through Ollama for conversational writing and artifact extraction, with a deterministic local fallback when Ollama is unavailable.
-
-### Work completed during the submission period
-
-The submission-period work beginning July 13, 2026 included:
-
-- Turning the initial concept into the Northstar Cloud support and engineering use case.
-- Expanding the demo knowledge base to 697+ expert decision cases (97 original cases plus 600 generated variations) across technical support, code, APIs, incidents, reporting, presentations, security, privacy, billing, client communication, onboarding, permissions, data pipelines, sales, documentation, accessibility, identity, networking, and escalation.
-- Adding structured decision records with the situation, goal, exact choice, rationale, rejected alternatives, constraints, reusable steps, outcome, reusable rule, exceptions, source files, and media attachments.
-- Adding CSV import and an approval step for new expert decisions.
-- Adding an Upload Completed Work workflow that extracts editable decision drafts from tickets, emails, logs, source files, PDFs, Word documents, PowerPoint decks, and employee notes while preserving screenshots and recordings as evidence.
-- Adding the Add Expert Decision workflow for actions recorded after the work happened.
-- Adding Assist Mode source tracing, confidence signals, escalation guidance, and general suggestions.
-- Adding tailored directions that preserve historical expert judgment while adapting the steps to the new issue.
-- Adding feedback-based correction, knowledge governance, outcome review, model insights, and a more complete visual product experience.
-
-### How judges can test it
-
-The app opens with a company access portal. Judges can click **Open Northstar demo** under **Development bypass** to test the fictional populated workspace without an account, API key, or private company file. They can also create a new company workspace to verify that it starts empty and stores its users, decisions, plans, and retrieval index separately. To test the stronger conversational path, install Ollama locally and pull the model using the commands below.
-
-1. Install Python 3.11 or newer.
-2. Open a terminal in the repository folder.
-3. Install dependencies with the command below.
-4. Start Streamlit with the command below.
-5. Open the local URL shown in the terminal.
-6. Click **Open Northstar demo** under **Development bypass**.
-7. In **SkillVault Chat**, ask a question and then ask a natural follow-up.
-8. In **Assist Mode**, analyze the prefilled upload-limit case and compare the historical evidence with the tailored SkillVault answer.
-9. In **Add Expert Decision**, add an approved decision with tools, methods, outcome, and optional media, then test a related issue in Assist Mode.
-10. In **Add Company Knowledge**, upload `sample_data/northstar_cloud_cases.csv`, review the editable preview, and approve it for company retrieval.
-
-The app automatically detects Ollama and falls back safely when the local model is not running. No model credential is entered into the UI.
-
-The project is intended to run as a local Streamlit application. Approved decisions from **Add Expert Decision**, approved CSV imports, human corrections, and approved final plans are saved locally in JSON files next to the app so they remain available after restart. Those local files are ignored by Git because they may contain company-specific information; the fictional sample knowledge pack remains stored in the repository.
 
 ## Current prototype
 
